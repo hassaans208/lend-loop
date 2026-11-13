@@ -1,6 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  resolve: { alias: { "@": fileURLToPath(new URL("./", import.meta.url)) } },
   test: {
     // Pure unit tests run in Node. Convex function tests opt into the
     // edge-runtime environment with a `@vitest-environment edge-runtime` comment,
