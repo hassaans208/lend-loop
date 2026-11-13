@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* A calm, neighbourly palette: moss green accent on warm paper. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --color-paper: #faf8f4;
+
+  --color-ink-50: #f6f5f3;
+  --color-ink-100: #eceae6;
+  --color-ink-200: #dcd8d1;
+  --color-ink-400: #a19b91;
+  --color-ink-500: #7d776d;
+  --color-ink-600: #5f5a52;
+  --color-ink-700: #48443e;
+  --color-ink-800: #33302c;
+  --color-ink-900: #1f1d1a;
+
+  --color-moss-50: #f1f6ef;
+  --color-moss-200: #cfe0c8;
+  --color-moss-600: #4d7a3f;
+  --color-moss-700: #3d6432;
+  --color-moss-800: #2f4e27;
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink-900);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
