@@ -1,0 +1,327 @@
+{
+  "id": "lendloopNotify01",
+  "name": "LendLoop: Request notification",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-loan-events",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "3eb40000-0000-4000-8000-000000000001",
+      "name": "Loan event webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "lendloop-loan-events"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verifies X-LendLoop-Signature over the RAW request body before trusting anything in it.\nconst crypto = require('crypto');\nconst item = $input.first();\nconst headers = item.json.headers || {};\nconst secret = $env.LENDLOOP_WEBHOOK_SECRET;\n\nlet raw;\nif (item.binary && item.binary.data) {\n  raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\n} else {\n  raw = JSON.stringify(item.json.body ?? {});\n}\n\nfunction reject(reason) {\n  return [{ json: { valid: false, reason } }];\n}\n\nif (!secret) return reject('NO_SECRET');\nconst sig = headers['x-lendloop-signature'];\nconst ts = headers['x-lendloop-timestamp'];\nif (!sig || !ts) return reject('MISSING_HEADERS');\nif (!/^\\d{1,12}$/.test(ts)) return reject('MALFORMED_TIMESTAMP');\nif (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return reject('STALE_TIMESTAMP');\n\nconst expected = 'sha256=' + crypto.createHmac('sha256', secret).update(ts + '.' + raw).digest('hex');\nconst a = Buffer.from(expected);\nconst b = Buffer.from(String(sig));\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return reject('BAD_SIGNATURE');\n\nlet payload;\ntry { payload = JSON.parse(raw); } catch { return reject('BAD_JSON'); }\nconst ok = payload && typeof payload.loanId === 'string' && typeof payload.idempotencyKey === 'string'\n  && payload.recipient && typeof payload.recipient.email === 'string';\nif (!ok) return reject('BAD_PAYLOAD');\n\nreturn [{ json: { valid: true, payload } }];"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000002",
+      "name": "Verify signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "1f000000-0000-4000-8000-000000000003",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1f000000-0000-4000-8000-000000000004",
+      "name": "Signature valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { accepted: true } }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "2e5f0000-0000-4000-8000-000000000005",
+      "name": "Respond 202 Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'Invalid signature' } }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "2e5f0000-0000-4000-8000-000000000006",
+      "name": "Respond 401 Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One plain-text message per status. Only fields from the minimal payload are used.\nconst p = $json.payload;\nconst app = $env.LENDLOOP_APP_URL || 'http://localhost:3000';\nconst dates = p.startDate === p.endDate ? p.startDate : p.startDate + ' to ' + p.endDate;\nconst hi = 'Hi ' + p.recipient.name + ',\\n\\n';\nconst bye = '\\n\\nLendLoop - Borrow what you need. Lend what you don\\'t.';\nconst t = {\n  pending:   ['New request for your ' + p.toolName, 'A neighbour would like to borrow your ' + p.toolName + ' for ' + dates + '.\\nApprove or decline it here: ' + app + '/incoming'],\n  approved:  ['Approved: ' + p.toolName, 'Good news! Your request to borrow the ' + p.toolName + ' for ' + dates + ' was approved.\\nDetails: ' + app + '/requests'],\n  declined:  ['Request declined: ' + p.toolName, 'Your request to borrow the ' + p.toolName + ' for ' + dates + ' was declined. Other tools are on the board: ' + app + '/tools'],\n  cancelled: ['Request cancelled: ' + p.toolName, 'The request to borrow your ' + p.toolName + ' for ' + dates + ' was cancelled by the borrower.'],\n  returned:  ['Returned: ' + p.toolName, 'The ' + p.toolName + ' you borrowed has been marked as returned. Thanks for being a good neighbour!'],\n}[p.status];\nif (!t) throw new Error('Unknown status ' + p.status);\nreturn [{ json: { to: p.recipient.email, subject: t[0], text: hi + t[1] + bye } }];"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000007",
+      "name": "Compose message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM || 'LendLoop <no-reply@lendloop.local>' }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e4a10000-0000-4000-8000-000000000008",
+      "name": "Send email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "lendloopSmtp0001",
+          "name": "LendLoop SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// HMAC-SHA256 over \"<timestamp>.<rawBody>\", same scheme as convex/lib/signature.ts.\n// The secret comes from the n8n container environment, never from this workflow.\nconst crypto = require('crypto');\nfunction sign(bodyObject) {\n  const secret = $env.LENDLOOP_WEBHOOK_SECRET;\n  if (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set in the n8n environment');\n  const body = JSON.stringify(bodyObject);\n  const timestamp = Math.floor(Date.now() / 1000).toString();\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(timestamp + '.' + body).digest('hex');\n  return { body, signature, timestamp };\n}\n\nconst p = $('Verify signature').first().json.payload;\nconst event = {\n  idempotencyKey: p.idempotencyKey,\n  loanId: p.loanId,\n  type: 'request_notification',\n  status: 'sent',\n  runId: 'n8n:' + $execution.id,\n};\nreturn [{ json: sign(event) }];"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000009",
+      "name": "Sign write-back (sent)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// HMAC-SHA256 over \"<timestamp>.<rawBody>\", same scheme as convex/lib/signature.ts.\n// The secret comes from the n8n container environment, never from this workflow.\nconst crypto = require('crypto');\nfunction sign(bodyObject) {\n  const secret = $env.LENDLOOP_WEBHOOK_SECRET;\n  if (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set in the n8n environment');\n  const body = JSON.stringify(bodyObject);\n  const timestamp = Math.floor(Date.now() / 1000).toString();\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(timestamp + '.' + body).digest('hex');\n  return { body, signature, timestamp };\n}\n\nconst p = $('Verify signature').first().json.payload;\nconst event = {\n  idempotencyKey: p.idempotencyKey,\n  loanId: p.loanId,\n  type: 'request_notification',\n  status: 'failed',\n  runId: 'n8n:' + $execution.id,\n  error: String(($json.error && $json.error.message) || $json.error || 'Email send failed').slice(0, 500),\n};\nreturn [{ json: sign(event) }];"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000010",
+      "name": "Sign write-back (failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONVEX_SITE_URL }}/n8n/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LendLoop-Signature",
+              "value": "={{ $json.signature }}"
+            },
+            {
+              "name": "X-LendLoop-Timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "4770a000-0000-4000-8000-000000000011",
+      "name": "Write back to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        200
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Loan event webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify signature": {
+      "main": [
+        [
+          {
+            "node": "Signature valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signature valid?": {
+      "main": [
+        [
+          {
+            "node": "Respond 202 Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond 401 Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond 202 Accepted": {
+      "main": [
+        [
+          {
+            "node": "Compose message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose message": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send email": {
+      "main": [
+        [
+          {
+            "node": "Sign write-back (sent)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sign write-back (failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign write-back (sent)": {
+      "main": [
+        [
+          {
+            "node": "Write back to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign write-back (failed)": {
+      "main": [
+        [
+          {
+            "node": "Write back to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "errorWorkflow": "lendloopErrorWf1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

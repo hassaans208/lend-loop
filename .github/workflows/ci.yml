@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck (Next.js + Convex)
+        run: npm run typecheck
+      - name: Unit + Convex tests
+        run: npm test
+      - name: Validate n8n workflow exports (valid JSON, no secrets)
+        run: |
+          for f in n8n/workflows/*.json; do node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))"; done
+          ! grep -RniE '"(password|apiKey|secret)"\s*:\s*"[^"]+"' n8n/workflows
+      - name: Build
+        run: npm run build
+        env:
+          # Build-only placeholders. pk_test_ + base64("example.clerk.accounts.dev$")
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk
+          CLERK_SECRET_KEY: sk_test_placeholder
+          NEXT_PUBLIC_CONVEX_URL: https://example.convex.cloud
+          NEXT_TELEMETRY_DISABLED: 1

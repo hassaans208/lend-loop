@@ -1,0 +1,329 @@
+{
+  "id": "lendloopOverdue1",
+  "name": "LendLoop: Overdue reminders",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "5c4e0000-0000-4000-8000-000000000012",
+      "name": "Every day at 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3a4b0000-0000-4000-8000-000000000013",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// HMAC-SHA256 over \"<timestamp>.<rawBody>\", same scheme as convex/lib/signature.ts.\n// The secret comes from the n8n container environment, never from this workflow.\nconst crypto = require('crypto');\nfunction sign(bodyObject) {\n  const secret = $env.LENDLOOP_WEBHOOK_SECRET;\n  if (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set in the n8n environment');\n  const body = JSON.stringify(bodyObject);\n  const timestamp = Math.floor(Date.now() / 1000).toString();\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(timestamp + '.' + body).digest('hex');\n  return { body, signature, timestamp };\n}\n\n// Body is an empty object; signing it still authenticates the request and blocks replays.\nreturn [{ json: sign({}) }];"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000014",
+      "name": "Sign request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONVEX_SITE_URL }}/n8n/overdue-loans",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LendLoop-Signature",
+              "value": "={{ $json.signature }}"
+            },
+            {
+              "name": "X-LendLoop-Timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "4770a000-0000-4000-8000-000000000015",
+      "name": "Fetch overdue loans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// One item per overdue loan. Convex already excluded loans reminded today.\nconst res = $input.first().json;\nif (!Array.isArray(res.loans)) throw new Error('Unexpected response from Convex: ' + JSON.stringify(res).slice(0, 200));\nreturn res.loans.map((loan) => ({ json: loan }));"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000016",
+      "name": "One item per loan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const app = $env.LENDLOOP_APP_URL || 'http://localhost:3000';\nreturn $input.all().map(({ json: l }) => ({\n  json: {\n    loanId: l.loanId,\n    idempotencyKey: l.idempotencyKey,\n    to: l.recipient.email,\n    subject: 'Reminder: please return the ' + l.toolName,\n    text: 'Hi ' + l.recipient.name + ',\\n\\nThe ' + l.toolName + ' you borrowed was due back on ' + l.endDate +\n      ' (' + l.daysOverdue + ' day' + (l.daysOverdue === 1 ? '' : 's') + ' ago). Please arrange to return it to the lender.\\n' +\n      'Your loans: ' + app + '/requests\\n\\nLendLoop',\n  },\n}));"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000017",
+      "name": "Compose reminder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.LENDLOOP_MAIL_FROM || 'LendLoop <no-reply@lendloop.local>' }}",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e4a10000-0000-4000-8000-000000000018",
+      "name": "Send reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "lendloopSmtp0001",
+          "name": "LendLoop SMTP"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// HMAC-SHA256 over \"<timestamp>.<rawBody>\", same scheme as convex/lib/signature.ts.\n// The secret comes from the n8n container environment, never from this workflow.\nconst crypto = require('crypto');\nfunction sign(bodyObject) {\n  const secret = $env.LENDLOOP_WEBHOOK_SECRET;\n  if (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set in the n8n environment');\n  const body = JSON.stringify(bodyObject);\n  const timestamp = Math.floor(Date.now() / 1000).toString();\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(timestamp + '.' + body).digest('hex');\n  return { body, signature, timestamp };\n}\n\n// Runs once per item; $('Compose reminder').item follows n8n's paired-item link back to this loan.\nconst r = $('Compose reminder').item.json;\nconst event = {\n  idempotencyKey: r.idempotencyKey,\n  loanId: r.loanId,\n  type: 'overdue_reminder',\n  status: 'sent',\n  runId: 'n8n:' + $execution.id,\n};\nreturn { json: sign(event) };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000019",
+      "name": "Sign write-back (sent)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// HMAC-SHA256 over \"<timestamp>.<rawBody>\", same scheme as convex/lib/signature.ts.\n// The secret comes from the n8n container environment, never from this workflow.\nconst crypto = require('crypto');\nfunction sign(bodyObject) {\n  const secret = $env.LENDLOOP_WEBHOOK_SECRET;\n  if (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set in the n8n environment');\n  const body = JSON.stringify(bodyObject);\n  const timestamp = Math.floor(Date.now() / 1000).toString();\n  const signature = 'sha256=' + crypto.createHmac('sha256', secret).update(timestamp + '.' + body).digest('hex');\n  return { body, signature, timestamp };\n}\n\n// Runs once per item; $('Compose reminder').item follows n8n's paired-item link back to this loan.\nconst r = $('Compose reminder').item.json;\nconst event = {\n  idempotencyKey: r.idempotencyKey,\n  loanId: r.loanId,\n  type: 'overdue_reminder',\n  status: 'failed',\n  runId: 'n8n:' + $execution.id,\n  error: String(($json.error && $json.error.message) || $json.error || 'Email send failed').slice(0, 500),\n};\nreturn { json: sign(event) };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "c0de0000-0000-4000-8000-000000000020",
+      "name": "Sign write-back (failed)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.CONVEX_SITE_URL }}/n8n/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-LendLoop-Signature",
+              "value": "={{ $json.signature }}"
+            },
+            {
+              "name": "X-LendLoop-Timestamp",
+              "value": "={{ $json.timestamp }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "4770a000-0000-4000-8000-000000000021",
+      "name": "Write back to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Every day at 09:00": {
+      "main": [
+        [
+          {
+            "node": "Sign request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Sign request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign request": {
+      "main": [
+        [
+          {
+            "node": "Fetch overdue loans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch overdue loans": {
+      "main": [
+        [
+          {
+            "node": "One item per loan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One item per loan": {
+      "main": [
+        [
+          {
+            "node": "Compose reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose reminder": {
+      "main": [
+        [
+          {
+            "node": "Send reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send reminder": {
+      "main": [
+        [
+          {
+            "node": "Sign write-back (sent)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sign write-back (failed)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign write-back (sent)": {
+      "main": [
+        [
+          {
+            "node": "Write back to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign write-back (failed)": {
+      "main": [
+        [
+          {
+            "node": "Write back to Convex",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "errorWorkflow": "lendloopErrorWf1",
+    "timezone": "UTC"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
