@@ -13,6 +13,7 @@ import type {
 import type * as admin from "../admin.js";
 import type * as automation from "../automation.js";
 import type * as automationEvents from "../automationEvents.js";
+import type * as dev from "../dev.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_automation from "../lib/automation.js";
@@ -30,6 +31,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   automation: typeof automation;
   automationEvents: typeof automationEvents;
+  dev: typeof dev;
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/automation": typeof lib_automation;
