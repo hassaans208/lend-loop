@@ -404,3 +404,4 @@ docker-compose.yml       n8n + Mailpit with persistent volumes
 - The Docker images: `docker compose up` was not run (registries blocked). The n8n image tag pins the version I tested via npm. Mailpit replaced the local SMTP sink.
 - Convex cloud → n8n over a tunnel (real network path).
 - The UI in a browser (rendering, accessibility checks, screenshots).
+# lend-loop
