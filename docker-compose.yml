@@ -52,9 +52,6 @@ services:
     ports:
       - "8025:8025" # web inbox
       - "1025:1025" # SMTP (only needed if you want to send from the host)
-    environment:
-      - MP_SMTP_AUTH_ACCEPT_ANY=1
-      - MP_SMTP_AUTH_ALLOW_INSECURE=1
     volumes:
       - mailpit_data:/data
 

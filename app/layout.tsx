@@ -12,9 +12,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className="min-h-dvh font-sans antialiased">
+    <html lang="en">
+      <body className="min-h-dvh font-sans antialiased"><ClerkProvider>
           <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded focus:bg-white focus:px-3 focus:py-2">
             Skip to content
           </a>
@@ -24,8 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               {children}
             </main>
           </ConvexClientProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider></body>
+    </html>
   );
 }

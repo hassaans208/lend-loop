@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { SignInButton, Show, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 
@@ -12,19 +12,19 @@ export function SiteHeader() {
           <LoopMark />
           LendLoop
         </Link>
-        <SignedOut>
+        <Show when="signed-out">
           <SignInButton mode="modal">
             <Button variant="secondary">Sign in</Button>
           </SignInButton>
-        </SignedOut>
-        <SignedIn>
+        </Show>
+        <Show when="signed-in">
           <div className="flex items-center gap-3">
             <Link href="/tools" className="text-sm font-medium text-ink-700 hover:text-ink-900">
               Board
             </Link>
             <UserButton />
           </div>
-        </SignedIn>
+        </Show>
       </div>
     </header>
   );

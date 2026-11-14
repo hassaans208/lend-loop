@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { SignInButton, Show } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -21,19 +21,19 @@ export default function HomePage() {
           A tool-lending board for your neighbourhood. List the drill you use twice a year, borrow the tent you need for one weekend.
         </p>
         <div className="mt-6">
-          <SignedOut>
+          <Show when="signed-out">
             <SignInButton mode="modal">
               <Button>Sign in to lend or borrow</Button>
             </SignInButton>
-          </SignedOut>
-          <SignedIn>
+          </Show>
+          <Show when="signed-in">
             <Link
               href="/tools"
               className="inline-flex min-h-9 items-center rounded-lg bg-moss-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-moss-800"
             >
               Go to the board
             </Link>
-          </SignedIn>
+          </Show>
         </div>
       </section>
 
